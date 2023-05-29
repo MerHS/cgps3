@@ -26,7 +26,16 @@ const COLLISION_DAMP: f32 = 0.5;
 const HRAD_9: f32 = H_RADIUS_SQ * H_RADIUS_SQ * H_RADIUS_SQ * H_RADIUS_SQ * H_RADIUS;
 const POLY6_W: f32 = 315. / 64. / std::f32::consts::PI / HRAD_9;
 const POLY6_WDEL: f32 = -945. / 32. / std::f32::consts::PI / HRAD_9;
-const WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+
+const WORLD_WALL_COLOR: Color = Color::rgb(0.8, 0.8, 0.8);
+const WALL_COLOR: Color = Color::rgb(0.3, 0.3, 0.3);
+const HOUSE_COLOR: Color = Color::rgb(0.1, 0.8, 0.2);
+
+const WALL_X: f32 = 2. * METRE;
+const WALL_H: f32 = 3. * METRE;
+const WALL_W: f32 = 0.5 * METRE;
+
+const HOUSE_W: f32 = 0.5 * METRE;
 
 pub mod hello;
 
@@ -129,6 +138,88 @@ fn setup(
 ) {
     commands.spawn(Camera2dBundle::default());
 
+    // Walls
+    commands.spawn(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(OFFSET_X, 0., 0.),
+            scale: Vec3::new(1., WORLD_HEIGHT, 1.),
+            ..default()
+        },
+        sprite: Sprite {
+            color: WORLD_WALL_COLOR,
+            ..default()
+        },
+        ..default()
+    });
+    commands.spawn(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(0., OFFSET_Y, 0.),
+            scale: Vec3::new(WORLD_WIDTH, 1., 1.),
+            ..default()
+        },
+        sprite: Sprite {
+            color: WORLD_WALL_COLOR,
+            ..default()
+        },
+        ..default()
+    });
+    commands.spawn(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(-OFFSET_X, 0., 0.),
+            scale: Vec3::new(1., WORLD_HEIGHT, 1.),
+            ..default()
+        },
+        sprite: Sprite {
+            color: WORLD_WALL_COLOR,
+            ..default()
+        },
+        ..default()
+    });
+    commands.spawn(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(0., -OFFSET_Y, 0.),
+            scale: Vec3::new(WORLD_WIDTH, 1., 1.),
+            ..default()
+        },
+        sprite: Sprite {
+            color: WORLD_WALL_COLOR,
+            ..default()
+        },
+        ..default()
+    });
+
+    // objs
+    commands.spawn(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(WALL_X + OFFSET_X + WALL_W / 2., OFFSET_Y + WALL_H / 2., 0.),
+            scale: Vec3::new(WALL_W, WALL_H, 1.),
+            ..default()
+        },
+        sprite: Sprite {
+            color: WALL_COLOR,
+            ..default()
+        },
+        ..default()
+    });
+
+    // house
+    commands.spawn(SpriteBundle {
+        transform: Transform {
+            translation: Vec3::new(
+                WORLD_WIDTH + OFFSET_X - HOUSE_W / 2.,
+                OFFSET_Y + HOUSE_W / 2.,
+                0.,
+            ),
+            scale: Vec3::new(HOUSE_W, HOUSE_W, 1.),
+            ..default()
+        },
+        sprite: Sprite {
+            color: HOUSE_COLOR,
+            ..default()
+        },
+        ..default()
+    });
+
     let ps = ParticleSystem::new();
 
     for ui in 1..=P_NUMH {
@@ -148,7 +239,7 @@ fn setup(
                         )
                         .into(),
                     ),
-                    transform: Transform::from_translation(Vec3::new(0., 0., 0.)),
+                    transform: Transform::from_translation(Vec3::new(0., 0., 2.)),
                     ..Default::default()
                 },
                 ParticleIdx {
@@ -165,56 +256,6 @@ fn setup(
     }
 
     commands.spawn(ps);
-
-    // Walls
-    commands.spawn(SpriteBundle {
-        transform: Transform {
-            translation: Vec3::new(OFFSET_X, 0., 0.),
-            scale: Vec3::new(1., WORLD_HEIGHT, 1.),
-            ..default()
-        },
-        sprite: Sprite {
-            color: WALL_COLOR,
-            ..default()
-        },
-        ..default()
-    });
-    commands.spawn(SpriteBundle {
-        transform: Transform {
-            translation: Vec3::new(0., OFFSET_Y, 0.),
-            scale: Vec3::new(WORLD_WIDTH, 1., 1.),
-            ..default()
-        },
-        sprite: Sprite {
-            color: WALL_COLOR,
-            ..default()
-        },
-        ..default()
-    });
-    commands.spawn(SpriteBundle {
-        transform: Transform {
-            translation: Vec3::new(-OFFSET_X, 0., 0.),
-            scale: Vec3::new(1., WORLD_HEIGHT, 1.),
-            ..default()
-        },
-        sprite: Sprite {
-            color: WALL_COLOR,
-            ..default()
-        },
-        ..default()
-    });
-    commands.spawn(SpriteBundle {
-        transform: Transform {
-            translation: Vec3::new(0., -OFFSET_Y, 0.),
-            scale: Vec3::new(WORLD_WIDTH, 1., 1.),
-            ..default()
-        },
-        sprite: Sprite {
-            color: WALL_COLOR,
-            ..default()
-        },
-        ..default()
-    });
 
     // Debug text
     commands.spawn(
@@ -398,8 +439,28 @@ fn apply_accel(mut ps: Query<&mut ParticleSystem>, particle_idx: Query<&Particle
             let part = &mut ps.particles[idx.idx];
             part.vel += idx.accel * TIME_DELTA;
 
-            // constraint in window
             let mut next_pos = part.pos + part.vel * TIME_DELTA;
+            // constraint at object
+            if WALL_X < next_pos.x && next_pos.x < WALL_X + WALL_W && next_pos.y < WALL_H {
+                if part.pos.x < WALL_X + 2.0 && WALL_X < next_pos.x {
+                    next_pos.x = WALL_X - (next_pos.x - WALL_X) - 0.05;
+                    part.vel.x = -COLLISION_DAMP * part.vel.x;
+                } else if WALL_X + WALL_W - 2.0 < part.pos.x && next_pos.x < WALL_X + WALL_W {
+                    next_pos.x = WALL_X + WALL_W + (WALL_X + WALL_W - next_pos.x) + 0.05;
+                    part.vel.x = -COLLISION_DAMP * part.vel.x;
+                }
+
+                if WALL_H - 10. <= next_pos.y
+                    && next_pos.y <= WALL_H
+                    && WALL_X <= part.pos.x
+                    && part.pos.x <= WALL_X + WALL_W
+                {
+                    next_pos.y = WALL_H - (next_pos.y - WALL_H) - 0.05;
+                    part.vel.y = -COLLISION_DAMP * part.vel.y;
+                }
+            }
+
+            // constraint in window
             if next_pos.x < 0. {
                 // next_pos.x = -next_pos.x;
                 next_pos.x = -next_pos.x + 0.05;
@@ -412,11 +473,12 @@ fn apply_accel(mut ps: Query<&mut ParticleSystem>, particle_idx: Query<&Particle
             if next_pos.y < 0. {
                 next_pos.y = -next_pos.y + 0.05;
                 part.vel.y = -COLLISION_DAMP * part.vel.y;
-            } else if next_pos.y > WORLD_HEIGHT {
-                next_pos.y = WORLD_HEIGHT - (next_pos.y - WORLD_HEIGHT) - 0.05;
-                // part.vel.y = -COLLISION_DAMP * part.vel.y;
-                part.vel.y = -COLLISION_DAMP * part.vel.y;
             }
+            //  else if next_pos.y > WORLD_HEIGHT {
+            //     next_pos.y = WORLD_HEIGHT - (next_pos.y - WORLD_HEIGHT) - 0.05;
+            //     // part.vel.y = -COLLISION_DAMP * part.vel.y;
+            //     part.vel.y = -COLLISION_DAMP * part.vel.y;
+            // }
 
             part.pos = next_pos;
             // if (idx.idx == 0) {
